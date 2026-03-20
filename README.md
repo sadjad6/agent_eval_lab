@@ -1,5 +1,7 @@
 # agent_eval_lab
 
+![Agent Eval Lab Banner](./agent_eval_lab_banner.png)
+
 Production-grade deterministic RL environment framework for training and evaluating LLM-style agents without external APIs.
 
 ## Overview
