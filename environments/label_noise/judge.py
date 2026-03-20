@@ -1,24 +1,24 @@
-"""Deterministic judge implementation for retrieval shift environment."""
+"""Deterministic judge implementation for label noise environment."""
 
 from __future__ import annotations
 
 import os
+from dataclasses import asdict
 from typing import Any, Dict, Tuple
 
 import numpy as np
 import torch
 import torch.nn.functional as F
 
+from core.config_schema import PipelineConfig
 from core.judge_interface import JudgeInterface, JudgeResult
 from core.seed import set_global_seed
-from environments.retrieval_shift.dataset import RetrievalShiftDataset
+from environments.label_noise.dataset import LabelNoiseDataset
 from training.ppo_trainer import PolicyValueNet
 
 
-from core.config_schema import PipelineConfig
-
-class RetrievalShiftJudge(JudgeInterface):
-    """Execution-based deterministic judge with thresholded quality checks."""
+class LabelNoiseJudge(JudgeInterface):
+    """Execution-based deterministic judge with thresholded quality checks for label noise."""
 
     def __init__(self, config: PipelineConfig) -> None:
         self.config = config
@@ -81,7 +81,7 @@ class RetrievalShiftJudge(JudgeInterface):
         return float(np.sqrt(grad_sq))
 
     def evaluate(self, model_path: str, device: str = "cpu") -> JudgeResult:
-        seed = int(self.config.seed)
+        seed = self.config.seed
         set_global_seed(seed)
 
         if not os.path.exists(model_path):
@@ -105,12 +105,13 @@ class RetrievalShiftJudge(JudgeInterface):
             )
 
         data_cfg = self.config.dataset
-        dataset = RetrievalShiftDataset(
+        dataset = LabelNoiseDataset(
             seed=seed,
-            num_samples=int(data_cfg.num_samples),
-            feature_dim=int(data_cfg.feature_dim),
-            num_classes=int(data_cfg.num_classes),
-            train_ratio=float(data_cfg.train_ratio),
+            num_samples=data_cfg.num_samples,
+            feature_dim=data_cfg.feature_dim,
+            num_classes=data_cfg.num_classes,
+            train_ratio=data_cfg.train_ratio,
+            noise_rate=self.config.env.noise_rate,
         )
 
         train = dataset.get_split("train")
@@ -127,19 +128,19 @@ class RetrievalShiftJudge(JudgeInterface):
 
         t = self.config.ood_thresholds
         checks = {
-            "ood_accuracy": val_metrics["accuracy"] >= float(t.ood_accuracy_min),
-            "entropy": val_metrics["entropy"] >= float(t.entropy_min),
-            "gradient_norm": grad_norm <= float(t.gradient_norm_max),
-            "generalization_gap": gap <= float(t.generalization_gap_max),
-            "retrieval_kl": kl_dist <= float(t.retrieval_kl_max),
+            "ood_accuracy": val_metrics["accuracy"] >= t.ood_accuracy_min,
+            "entropy": val_metrics["entropy"] >= t.entropy_min,
+            "gradient_norm": grad_norm <= t.gradient_norm_max,
+            "generalization_gap": gap <= t.generalization_gap_max,
+            "retrieval_kl": kl_dist <= t.retrieval_kl_max,
         }
 
         penalties = []
-        penalties.append(max(0.0, float(t.ood_accuracy_min) - val_metrics["accuracy"]))
-        penalties.append(max(0.0, float(t.entropy_min) - val_metrics["entropy"]))
-        penalties.append(max(0.0, grad_norm - float(t.gradient_norm_max)) / max(float(t.gradient_norm_max), 1e-6))
-        penalties.append(max(0.0, gap - float(t.generalization_gap_max)))
-        penalties.append(max(0.0, kl_dist - float(t.retrieval_kl_max)))
+        penalties.append(max(0.0, t.ood_accuracy_min - val_metrics["accuracy"]))
+        penalties.append(max(0.0, t.entropy_min - val_metrics["entropy"]))
+        penalties.append(max(0.0, grad_norm - t.gradient_norm_max) / max(t.gradient_norm_max, 1e-6))
+        penalties.append(max(0.0, gap - t.generalization_gap_max))
+        penalties.append(max(0.0, kl_dist - t.retrieval_kl_max))
 
         penalty = float(np.mean(penalties))
         score = float(np.clip(1.0 - penalty, 0.0, 1.0))

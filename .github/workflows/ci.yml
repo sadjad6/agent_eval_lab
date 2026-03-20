@@ -1,0 +1,33 @@
+name: CI Pipeline
+
+on:
+  push:
+    branches: ["main", "feature/*"]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          
+      - name: Run Tests
+        run: |
+          pytest tests/ -v --cov=./ --cov-report=xml
+          
+      - name: Smoke Test Train
+        run: |
+          python main.py train --config configs/default.yaml
+          
+      - name: Smoke Test Reproduce
+        run: |
+          python main.py reproduce --config configs/default.yaml

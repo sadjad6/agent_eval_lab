@@ -1,5 +1,7 @@
 # agent_eval_lab
 
+![Agent Eval Lab Banner](./agent_eval_lab_banner.png)
+
 Production-grade deterministic RL environment framework for training and evaluating LLM-style agents without external APIs.
 
 ## Overview
@@ -11,6 +13,14 @@ Production-grade deterministic RL environment framework for training and evaluat
 - PPO training with stability safeguards
 - OOD evaluation under distribution shift
 - reproducibility guarantees for CI workflows
+
+## Recent Features & Improvements
+- **Environments**: Added the new `label_noise` environment and fixed GAE for 1-step episodes.
+- **Robustness**: Enforced deterministic PyTorch natively and secured `torch.load` operations.
+- **Architecture**: Rewrote main execution to `argparse` subcommands (`train`, `evaluate`, `reproduce`) and implemented robust typed configurations (`PipelineConfig`).
+- **Algorithm**: Fixed the exact KL approximation formulation in PPO for Schulman verification.
+- **GPU Acceleration**: Fully integrated end-to-end device mapping (`device: "cuda"` / `"cpu"`).
+- **CI/CD Validation**: Expanded full `pytest` suite and integrated GitHub Actions workflows.
 
 The environment is a retrieval-style contextual bandit under controlled covariance and class-prior shift.
 
@@ -83,13 +93,13 @@ Safety aborts trigger when:
 ## Run training
 
 ```bash
-python main.py --config configs/default.yaml
+uv run python main.py train --config configs/default.yaml
 ```
 
-Optional collapse comparison run:
+Optional reproducibility verification check run:
 
 ```bash
-python main.py --config configs/default.yaml --compare-no-entropy
+uv run python main.py reproduce --config configs/default.yaml
 ```
 
 ## Run judge only
@@ -98,9 +108,10 @@ Use Python shell or script:
 
 ```python
 import yaml
+from core.config_schema import PipelineConfig
 from environments.retrieval_shift.judge import RetrievalShiftJudge
 
-cfg = yaml.safe_load(open("configs/default.yaml", "r", encoding="utf-8"))
+cfg = PipelineConfig.from_dict(yaml.safe_load(open("configs/default.yaml", "r", encoding="utf-8")))
 judge = RetrievalShiftJudge(cfg)
 print(judge.evaluate("outputs/default_run/policy.pt"))
 ```

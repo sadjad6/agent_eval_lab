@@ -1,4 +1,4 @@
-"""Retrieval environment under controlled distribution shift."""
+"""Label noise environment."""
 
 from __future__ import annotations
 
@@ -7,15 +7,15 @@ from typing import Any, Dict
 import numpy as np
 
 from core.env_interface import EnvInterface
-from environments.retrieval_shift.dataset import RetrievalShiftDataset
+from environments.label_noise.dataset import LabelNoiseDataset
 
 
-class RetrievalShiftEnv(EnvInterface):
-    """One-step contextual bandit environment for retrieval policy training."""
+class LabelNoiseEnv(EnvInterface):
+    """One-step contextual bandit environment for label noise robustness."""
 
     def __init__(
         self,
-        dataset: RetrievalShiftDataset,
+        dataset: LabelNoiseDataset,
         split: str,
         seed: int,
         entropy_penalty_coef: float,

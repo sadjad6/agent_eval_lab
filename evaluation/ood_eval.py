@@ -12,9 +12,9 @@ from environments.retrieval_shift.dataset import RetrievalShiftDataset
 from training.ppo_trainer import PolicyValueNet
 
 
-def _evaluate_split(model: PolicyValueNet, features: np.ndarray, labels: np.ndarray) -> Dict[str, Any]:
-    x = torch.from_numpy(features)
-    y = torch.from_numpy(labels)
+def _evaluate_split(model: PolicyValueNet, features: np.ndarray, labels: np.ndarray, device: str = "cpu") -> Dict[str, Any]:
+    x = torch.from_numpy(features).to(device)
+    y = torch.from_numpy(labels).to(device)
     with torch.no_grad():
         logits, _ = model(x)
         probs = torch.softmax(logits, dim=-1)
@@ -24,32 +24,35 @@ def _evaluate_split(model: PolicyValueNet, features: np.ndarray, labels: np.ndar
     return {"accuracy": acc, "distribution": action_dist}
 
 
-def evaluate_ood(model_path: str, config: Dict[str, Any]) -> Dict[str, float]:
-    """Load checkpoint and evaluate train/val distribution shift sensitivity."""
-    set_global_seed(int(config["seed"]))
+from core.config_schema import PipelineConfig
 
-    ckpt = torch.load(model_path, map_location="cpu")
+def evaluate_ood(model_path: str, config: PipelineConfig, device: str = "cpu") -> Dict[str, float]:
+    """Load checkpoint and evaluate train/val distribution shift sensitivity."""
+    set_global_seed(int(config.seed))
+
+    ckpt = torch.load(model_path, map_location=device, weights_only=True)
     model = PolicyValueNet(
         obs_dim=int(ckpt["obs_dim"]),
         num_actions=int(ckpt["num_actions"]),
         hidden_dim=int(ckpt.get("hidden_dim", 128)),
     )
     model.load_state_dict(ckpt["model_state_dict"])
+    model.to(device)
     model.eval()
 
-    dcfg = config["dataset"]
+    dcfg = config.dataset
     dataset = RetrievalShiftDataset(
-        seed=int(config["seed"]),
-        num_samples=int(dcfg["num_samples"]),
-        feature_dim=int(dcfg["feature_dim"]),
-        num_classes=int(dcfg["num_classes"]),
-        train_ratio=float(dcfg["train_ratio"]),
+        seed=int(config.seed),
+        num_samples=int(dcfg.num_samples),
+        feature_dim=int(dcfg.feature_dim),
+        num_classes=int(dcfg.num_classes),
+        train_ratio=float(dcfg.train_ratio),
     )
 
     train = dataset.get_split("train")
     val = dataset.get_split("val")
-    train_m = _evaluate_split(model, train.features, train.labels)
-    val_m = _evaluate_split(model, val.features, val.labels)
+    train_m = _evaluate_split(model, train.features, train.labels, device)
+    val_m = _evaluate_split(model, val.features, val.labels, device)
 
     p = train_m["distribution"]
     q = val_m["distribution"]

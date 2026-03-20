@@ -30,6 +30,7 @@ training:
   kl_abort_threshold: 0.15
   hidden_dim: 128
   output_dir: outputs/default_run
+  device: cpu
 
 ood_thresholds:
   ood_accuracy_min: 0.35

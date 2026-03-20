@@ -15,6 +15,12 @@ def compute_gae(
     gae_lambda: float,
 ) -> Tuple[np.ndarray, np.ndarray]:
     """Compute GAE advantages and value targets."""
+    # Fast path for one-step episodes where all dones are 1.0
+    if np.all(dones == 1.0):
+        advantages = rewards - values
+        returns = advantages + values
+        return advantages.astype(np.float32), returns.astype(np.float32)
+
     n = rewards.shape[0]
     advantages = np.zeros_like(rewards, dtype=np.float32)
     last_adv = 0.0

@@ -1,0 +1,44 @@
+seed: 42
+
+logging:
+  level: INFO
+
+dataset:
+  num_samples: 2000
+  feature_dim: 16
+  num_classes: 3
+  train_ratio: 0.8
+
+env:
+  entropy_penalty_coef: 0.1
+  kl_penalty_coef: 0.05
+  kl_threshold: 0.1
+  top_k: 1
+  noise_rate: 0.2
+
+training:
+  learning_rate: 0.001
+  clip_epsilon: 0.2
+  entropy_coef: 0.01
+  value_coef: 0.5
+  gamma: 0.99
+  gae_lambda: 0.95
+  max_grad_norm: 1.0
+  train_iterations: 30
+  steps_per_iter: 512
+  update_epochs: 4
+  minibatch_size: 128
+  kl_abort_threshold: 0.2
+  hidden_dim: 64
+  output_dir: outputs/label_noise_run
+  device: cpu
+
+ood_thresholds:
+  ood_accuracy_min: 0.60
+  entropy_min: 0.50
+  gradient_norm_max: 5.0
+  generalization_gap_max: 0.20
+  retrieval_kl_max: 0.50
+
+reproducibility:
+  dual_run_test: true
