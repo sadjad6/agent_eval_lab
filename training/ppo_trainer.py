@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 import os
-from dataclasses import dataclass
+from dataclasses import asdict
 from typing import Any, Dict, List
 
 import numpy as np
@@ -13,6 +13,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.distributions import Categorical
 
+from core.config_schema import PipelineConfig
 from core.seed import config_hash
 from evaluation.stability_metrics import gradient_spike, rolling_mean
 from training.advantage import compute_gae
@@ -43,51 +44,14 @@ class PolicyValueNet(nn.Module):
         return logits, value
 
 
-@dataclass
-class PPOConfig:
-    """Trainer hyperparameters."""
-
-    learning_rate: float
-    clip_epsilon: float
-    entropy_coef: float
-    value_coef: float
-    gamma: float
-    gae_lambda: float
-    max_grad_norm: float
-    train_iterations: int
-    steps_per_iter: int
-    update_epochs: int
-    minibatch_size: int
-    kl_abort_threshold: float
-    output_dir: str
-    seed: int
-
-
 class PPOTrainer:
     """Deterministic PPO training loop for one-step contextual bandit tasks."""
 
-    def __init__(self, env: Any, config: Dict[str, Any]) -> None:
-        train_cfg = config["training"]
-        self.cfg = PPOConfig(
-            learning_rate=float(train_cfg["learning_rate"]),
-            clip_epsilon=float(train_cfg["clip_epsilon"]),
-            entropy_coef=float(train_cfg["entropy_coef"]),
-            value_coef=float(train_cfg["value_coef"]),
-            gamma=float(train_cfg["gamma"]),
-            gae_lambda=float(train_cfg["gae_lambda"]),
-            max_grad_norm=float(train_cfg["max_grad_norm"]),
-            train_iterations=int(train_cfg["train_iterations"]),
-            steps_per_iter=int(train_cfg["steps_per_iter"]),
-            update_epochs=int(train_cfg["update_epochs"]),
-            minibatch_size=int(train_cfg["minibatch_size"]),
-            kl_abort_threshold=float(train_cfg["kl_abort_threshold"]),
-            output_dir=str(train_cfg["output_dir"]),
-            seed=int(config["seed"]),
-        )
-
+    def __init__(self, env: Any, config: PipelineConfig) -> None:
+        self.cfg = config.training
         self.env = env
-        self.device = torch.device("cpu")
-        self.model = PolicyValueNet(env.feature_dim, env.num_classes, hidden_dim=int(train_cfg["hidden_dim"]))
+        self.device = torch.device(self.cfg.device)
+        self.model = PolicyValueNet(env.feature_dim, env.num_classes, hidden_dim=self.cfg.hidden_dim)
         self.model.to(self.device)
         self.optimizer = torch.optim.Adam(self.model.parameters(), lr=self.cfg.learning_rate)
         os.makedirs(self.cfg.output_dir, exist_ok=True)
@@ -95,7 +59,8 @@ class PPOTrainer:
         self.metrics_logger = MetricsLogger(os.path.join(self.cfg.output_dir, "training_metrics.jsonl"))
         self.grad_history: List[float] = []
 
-        self.config_hash = config_hash(config)
+        self.config_hash = config_hash(asdict(config))
+        self.seed = config.seed
         LOGGER.info("Config hash: %s", self.config_hash)
 
     @staticmethod
@@ -113,7 +78,7 @@ class PPOTrainer:
 
         for _ in range(self.cfg.steps_per_iter):
             obs = self.env.reset()
-            obs_t = self._to_tensor(obs).unsqueeze(0)
+            obs_t = self._to_tensor(obs).unsqueeze(0).to(self.device)
 
             with torch.no_grad():
                 logits, value = self.model(obs_t)
@@ -157,11 +122,11 @@ class PPOTrainer:
         return float(np.sqrt(total))
 
     def _ppo_update(self, batch: Dict[str, np.ndarray]) -> Dict[str, float]:
-        obs = self._to_tensor(batch["obs"])
-        actions = torch.from_numpy(batch["actions"])
-        old_logp = torch.from_numpy(batch["logp"])
-        advantages = torch.from_numpy(batch["advantages"])
-        returns = torch.from_numpy(batch["returns"])
+        obs = self._to_tensor(batch["obs"]).to(self.device)
+        actions = torch.from_numpy(batch["actions"]).to(self.device)
+        old_logp = torch.from_numpy(batch["logp"]).to(self.device)
+        advantages = torch.from_numpy(batch["advantages"]).to(self.device)
+        returns = torch.from_numpy(batch["returns"]).to(self.device)
 
         advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-8)
 
@@ -202,7 +167,7 @@ class PPOTrainer:
                 self.optimizer.step()
 
                 with torch.no_grad():
-                    approx_kl = torch.mean(mb_old_logp - new_logp).item()
+                    approx_kl = 0.5 * torch.mean((new_logp - mb_old_logp) ** 2).item()
                 last_kl = float(approx_kl)
                 last_entropy = float(entropy.item())
 
@@ -270,6 +235,7 @@ class PPOTrainer:
                 latest_metrics["abort_reason"] = abort_reason
                 break
 
+        self.model.cpu()
         ckpt = {
             "model_state_dict": self.model.state_dict(),
             "obs_dim": self.env.feature_dim,
@@ -277,7 +243,7 @@ class PPOTrainer:
             "hidden_dim": self.model.hidden_dim,
             "metadata": {
                 "model_type": "mlp_policy",
-                "seed": self.cfg.seed,
+                "seed": self.seed,
                 "last_grad_norm": latest_metrics.get("gradient_norm", 0.0),
                 "initial_entropy": initial_entropy if initial_entropy is not None else 0.0,
                 "config_hash": self.config_hash,
@@ -285,5 +251,6 @@ class PPOTrainer:
         }
         ckpt_path = os.path.join(self.cfg.output_dir, "policy.pt")
         torch.save(ckpt, ckpt_path)
+        self.model.to(self.device)
         latest_metrics["checkpoint_path"] = ckpt_path
         return latest_metrics

@@ -6,6 +6,7 @@ import shutil
 import tempfile
 import unittest
 
+from core.config_schema import PipelineConfig
 from environments.retrieval_shift.dataset import RetrievalShiftDataset
 from environments.retrieval_shift.env import RetrievalShiftEnv
 from training.ppo_trainer import PPOTrainer
@@ -15,9 +16,16 @@ class TestPPOEntropy(unittest.TestCase):
     def test_trainer_produces_non_zero_entropy(self) -> None:
         out_dir = tempfile.mkdtemp(prefix="ppo_entropy_test_")
         try:
-            cfg = {
+            cfg = PipelineConfig.from_dict({
                 "seed": 11,
                 "dataset": {"num_samples": 1500, "feature_dim": 32, "num_classes": 5, "train_ratio": 0.8},
+                "env": {
+                    "entropy_penalty_coef": 0.1,
+                    "kl_penalty_coef": 0.1,
+                    "kl_threshold": 0.1,
+                    "top_k": 1,
+                    "name": "retrieval_shift"
+                },
                 "training": {
                     "learning_rate": 0.001,
                     "clip_epsilon": 0.2,
@@ -33,13 +41,22 @@ class TestPPOEntropy(unittest.TestCase):
                     "kl_abort_threshold": 1.0,
                     "hidden_dim": 64,
                     "output_dir": out_dir,
+                    "device": "cpu",
                 },
-            }
-            dataset = RetrievalShiftDataset(seed=cfg["seed"])
+                "ood_thresholds": {
+                    "ood_accuracy_min": 0.35,
+                    "entropy_min": 1.0,
+                    "gradient_norm_max": 5.0,
+                    "generalization_gap_max": 0.25,
+                    "retrieval_kl_max": 0.60
+                },
+                "reproducibility": {"dual_run_test": False}
+            })
+            dataset = RetrievalShiftDataset(seed=cfg.seed)
             env = RetrievalShiftEnv(
                 dataset=dataset,
                 split="train",
-                seed=cfg["seed"],
+                seed=cfg.seed,
                 entropy_penalty_coef=0.1,
                 kl_penalty_coef=0.1,
                 kl_threshold=0.1,
