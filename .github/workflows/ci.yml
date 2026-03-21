@@ -22,7 +22,7 @@ jobs:
           
       - name: Run Tests
         run: |
-          pytest tests/ -v --cov=./ --cov-report=xml
+          python -m pytest tests/ -v --cov=./ --cov-report=xml
           
       - name: Smoke Test Train
         run: |
