@@ -1,7 +1,5 @@
 # agent_eval_lab
 
-![Agent Eval Lab Banner](./agent_eval_lab_banner.png)
-
 Experimental framework for training and evaluating small policy networks in synthetic, one-step contextual-bandit environments. It uses a custom PyTorch PPO-style trainer and threshold-based checkpoint judges without external model APIs; it does not train or evaluate an LLM.
 
 ## Overview
