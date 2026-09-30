@@ -1,5 +1,9 @@
 # agent_eval_lab
 
+![agent_eval_lab project artwork](./agent_eval_lab_banner.png)
+
+*Original concept artwork. The implemented benchmark uses synthetic policy environments; LLM-agent and production-readiness labels are design aspirations.*
+
 Experimental framework for training and evaluating small policy networks in synthetic, one-step contextual-bandit environments. It uses a custom PyTorch PPO-style trainer and threshold-based checkpoint judges without external model APIs; it does not train or evaluate an LLM.
 
 ## Overview
